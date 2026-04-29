@@ -159,10 +159,13 @@ header{background:#0f1a2b;color:white;padding:0 18px;height:50px;display:flex;al
 .bg-zoom-val{font-size:11px;font-weight:700;color:#2dd4bf;min-width:28px;text-align:right;}
 
 /* Canvas */
-.canvas-container{flex:1;overflow:auto;padding:20px;display:flex;align-items:flex-start;justify-content:center;}
-.floor-canvas{position:relative;width:920px;min-height:600px;background:#fdfdfd;border:2px dashed #d0d4dc;border-radius:12px;overflow:visible;box-shadow:0 4px 20px rgba(0,0,0,.06);transition:border-color .2s,background .2s;flex-shrink:0;}
+.canvas-container{flex:1;overflow:auto;padding:20px;display:flex;align-items:flex-start;justify-content:flex-start;}
+.floor-canvas{position:relative;width:1300px;min-height:760px;background:#fdfdfd;border:2px dashed #d0d4dc;border-radius:12px;overflow:visible;box-shadow:0 4px 20px rgba(0,0,0,.06);transition:border-color .2s,background .2s;flex-shrink:0;}
 .floor-canvas.drag-over{border-color:#2dd4bf;background:#f0fdfc;}
-.bg-img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;pointer-events:none;user-select:none;transform-origin:center center;border-radius:10px;}
+.floor-canvas.bg-locked .bg-img{outline:2px solid #f97316;outline-offset:-2px;}
+.bg-img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:fill;pointer-events:none;user-select:none;border-radius:10px;}
+/* Rubber-band selection box */
+.rubber-band{position:absolute;border:1.5px solid #2dd4bf;background:rgba(45,212,191,.08);pointer-events:none;z-index:50;border-radius:2px;}
 .drop-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;transition:opacity .2s;}
 .drop-hint.hidden{opacity:0;}
 .drop-hint .dhi{font-size:32px;margin-bottom:8px;display:block;}
@@ -170,17 +173,18 @@ header{background:#0f1a2b;color:white;padding:0 18px;height:50px;display:flex;al
 .drop-hint p span{display:block;font-size:10.5px;color:#ddd;margin-top:3px;}
 
 /* ── DESK ICON ── */
-.desk-icon{position:absolute;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:grab;user-select:none;z-index:10;transform-origin:top center;}
+.desk-icon{position:absolute;display:flex;flex-direction:column;align-items:center;gap:calc(3px * var(--ds,1));cursor:grab;user-select:none;z-index:10;}
 .desk-icon:active{cursor:grabbing;}
-.desk-body{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;order:0;}
-.desk-person{width:17px;height:17px;background:var(--dc-l,#5eead4);border-radius:50%;border:2px solid rgba(255,255,255,.6);flex-shrink:0;}
-.desk-surface{background:var(--dc,#2dd4bf);border-radius:5px;width:54px;height:32px;flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;}
-.desk-label{color:white;font-size:9px;font-weight:700;white-space:nowrap;max-width:50px;overflow:hidden;text-overflow:ellipsis;text-align:center;letter-spacing:.1px;line-height:1;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.3);}
+.desk-body{position:relative;display:flex;flex-direction:column;align-items:center;gap:calc(3px * var(--ds,1));order:0;}
+.desk-person{width:calc(17px * var(--ds,1));height:calc(17px * var(--ds,1));background:var(--dc-l,#5eead4);border-radius:50%;border:2px solid rgba(255,255,255,.6);flex-shrink:0;}
+.desk-surface{background:var(--dc,#2dd4bf);border-radius:calc(5px * var(--ds,1));width:calc(54px * var(--ds,1));height:calc(32px * var(--ds,1));flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;}
+.desk-label{color:white;font-size:calc(9px * var(--ds,1));font-weight:700;white-space:nowrap;max-width:calc(50px * var(--ds,1));overflow:hidden;text-overflow:ellipsis;text-align:center;letter-spacing:.1px;line-height:1;pointer-events:none;text-shadow:0 1px 2px rgba(0,0,0,.3);}
 .desk-icon:hover .desk-surface{filter:brightness(1.1);}
 .desk-icon:hover .desk-person{filter:brightness(1.1);}
 .desk-icon.selected .desk-surface{outline:2px solid #0d9488;outline-offset:3px;}
+.desk-icon.multi-sel .desk-surface{outline:2px solid #f97316;outline-offset:3px;}
 .desk-controls{display:flex;align-items:center;gap:3px;opacity:0;pointer-events:none;transition:opacity .13s;order:2;padding-top:2px;}
-.desk-icon:hover .desk-controls,.desk-icon.selected .desk-controls{opacity:1;pointer-events:all;}
+.desk-icon:hover .desk-controls,.desk-icon.selected .desk-controls,.desk-icon.multi-sel .desk-controls{opacity:1;pointer-events:all;}
 .dc-btn{width:18px;height:18px;border-radius:4px;border:1px solid rgba(255,255,255,.45);background:rgba(15,26,43,.75);color:white;font-size:13px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700;transition:background .13s;line-height:1;}
 .dc-btn:hover{background:#0d9488;border-color:#2dd4bf;}
 .dc-btn.dept{font-size:10px;width:20px;}
@@ -386,6 +390,7 @@ header{background:#0f1a2b;color:white;padding:0 18px;height:50px;display:flex;al
     <div class="canvas-toolbar">
       <button class="tbtn" id="upload-bg-btn">🖼 Upload BG</button>
       <button class="tbtn danger" id="clear-bg-btn">✕ Clear BG</button>
+      <button class="tbtn" id="lock-bg-btn">🔓 Lock BG</button>
       <button class="tbtn danger" id="clear-desks-btn">🗑 Clear Desks</button>
       <button class="tbtn" id="key-toggle-btn">🗝 New Hire Key</button>
       <div class="bg-zoom-wrap" id="bg-zoom-wrap">
@@ -458,7 +463,7 @@ let nextDeptId = 1;
 // ═══════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════
-function mkDraft(id, name){ return {id,name:name||'Option A',desks:[],background:null,bgZoom:100,departments:[],showKey:false,keyPos:{x:20,y:20}}; }
+function mkDraft(id, name){ return {id,name:name||'Option A',desks:[],background:null,bgZoom:100,departments:[],showKey:false,keyPos:{x:20,y:20},bgLocked:false,canvasW:1300,canvasH:760}; }
 function mkOffice(id){ return {id,name:`Floor ${id}`,color:COLOR_OPTIONS[(id-1)%COLOR_OPTIONS.length].hex,nextDraftId:2,activeDraftId:1,drafts:[mkDraft(1,'Option A')]}; }
 
 const OFFICES = [mkOffice(1),mkOffice(2),mkOffice(3),mkOffice(4)];
@@ -470,6 +475,11 @@ let historyLog = [];
 // Drag state
 let draggingDesk = null, dragOffset = {x:0,y:0};
 let sortState = null; // office reorder drag
+
+// Multi-select state
+let selectedDeskIds = new Set();
+let rubberBand = null;
+let multiDragState = null;
 
 // ═══════════════════════════════════════════════════════
 // HELPERS
@@ -1025,11 +1035,24 @@ function renderCanvas(){
   canvas.querySelectorAll('.desk-icon').forEach(d=>d.remove());
   if(!draft)return;
 
+  // Set canvas dimensions from draft
+  canvas.style.width=(draft.canvasW||1300)+'px';
+  canvas.style.height=(draft.canvasH||760)+'px';
+
+  // Sync lock state
+  const locked=!!draft.bgLocked;
+  canvas.classList.toggle('bg-locked',locked);
+  const lockBtn=document.getElementById('lock-bg-btn');
+  if(lockBtn){ lockBtn.textContent=locked?'🔒 Locked BG':'🔓 Lock BG'; lockBtn.classList.toggle('active',locked); }
+  document.getElementById('upload-bg-btn').disabled=locked;
+  document.getElementById('clear-bg-btn').disabled=locked;
+  document.getElementById('bg-zoom-slider').disabled=locked;
+
   let bgImg=canvas.querySelector('.bg-img');
   if(draft.background){
     if(!bgImg){ bgImg=document.createElement('img'); bgImg.className='bg-img'; bgImg.draggable=false; canvas.insertBefore(bgImg,canvas.firstChild); }
     bgImg.src=draft.background; applyBgZoom(bgImg,draft.bgZoom);
-    hint.classList.add('hidden'); showBgZoom(true,draft.bgZoom);
+    hint.classList.add('hidden'); showBgZoom(!locked,draft.bgZoom);
   } else {
     bgImg?.remove(); hint.classList.remove('hidden'); showBgZoom(false);
   }
@@ -1052,12 +1075,13 @@ function mkDeskEl(desk){
   el.className='desk-icon';
   el.dataset.id=desk.id;
   el.style.left=desk.x+'px'; el.style.top=desk.y+'px';
-  el.style.transform=`scale(${desk.scale||1})`; el.style.transformOrigin='top center';
+  el.style.setProperty('--ds', desk.scale||1);
   const dept = desk.deptId ? getDept(desk.deptId) : null;
   const dc  = desk.color||(dept ? dept.color : '#2dd4bf');
   const dcl = desk.color?lighten(desk.color,0.3):(dept ? lighten(dept.color, 0.3) : '#5eead4');
   el.style.setProperty('--dc', dc);
   el.style.setProperty('--dc-l', dcl);
+  if(selectedDeskIds.has(desk.id)) el.classList.add('multi-sel');
   el.innerHTML=`
     <div class="desk-body">
       ${desk.newHire?'<div class="desk-new-badge">NEW</div>':''}
@@ -1077,9 +1101,9 @@ function mkDeskEl(desk){
       if(a==='del'){removeDesk(desk.id);return;}
       if(a==='settings'){openDeskSettings(e,desk,el);return;}
       const step=.15;
-      if(a==='shrink')desk.scale=clamp((desk.scale||1)-step,.4,2.5);
-      if(a==='grow')desk.scale=clamp((desk.scale||1)+step,.4,2.5);
-      el.style.transform=`scale(${desk.scale})`; save();
+      if(a==='shrink')desk.scale=clamp((desk.scale||1)-step,.3,3);
+      if(a==='grow')desk.scale=clamp((desk.scale||1)+step,.3,3);
+      el.style.setProperty('--ds',desk.scale); save();
     });
   });
   el.addEventListener('mousedown',startDeskDrag);
@@ -1172,7 +1196,21 @@ function _stopKeyDrag(){
 // ═══════════════════════════════════════════════════════
 // DESK DRAG
 // ═══════════════════════════════════════════════════════
-function startDeskDrag(e){ if(e.target.matches('.dc-btn'))return; e.preventDefault(); const el=e.currentTarget; const r=el.getBoundingClientRect(); draggingDesk=el; dragOffset={x:e.clientX-r.left,y:e.clientY-r.top}; el.classList.add('selected'); el.style.zIndex=100; document.addEventListener('mousemove',onDeskDrag); document.addEventListener('mouseup',stopDeskDrag); }
+function startDeskDrag(e){
+  if(e.target.matches('.dc-btn'))return;
+  e.preventDefault();
+  const el=e.currentTarget;
+  const id=+el.dataset.id;
+  // If this desk is in a multi-selection, start group drag
+  if(selectedDeskIds.has(id)&&selectedDeskIds.size>1){ startMultiDrag(e); return; }
+  // Otherwise clear selection and do single drag
+  clearDeskSelection();
+  const r=el.getBoundingClientRect();
+  draggingDesk=el; dragOffset={x:e.clientX-r.left,y:e.clientY-r.top};
+  el.classList.add('selected'); el.style.zIndex=100;
+  document.addEventListener('mousemove',onDeskDrag);
+  document.addEventListener('mouseup',stopDeskDrag);
+}
 function startDeskDragTouch(e){ if(e.target.matches('.dc-btn'))return; e.preventDefault(); const t=e.touches[0]; const el=e.currentTarget; const r=el.getBoundingClientRect(); draggingDesk=el; dragOffset={x:t.clientX-r.left,y:t.clientY-r.top}; el.classList.add('selected'); el.style.zIndex=100; document.addEventListener('touchmove',onDeskDragTouch,{passive:false}); document.addEventListener('touchend',stopDeskDrag); }
 function onDeskDrag(e){ moveDeskTo(e.clientX,e.clientY); }
 function onDeskDragTouch(e){ e.preventDefault(); moveDeskTo(e.touches[0].clientX,e.touches[0].clientY); }
@@ -1181,17 +1219,8 @@ function moveDeskTo(cx,cy){
   const canvas=document.getElementById('floor-canvas');
   const cr=canvas.getBoundingClientRect();
   const p=canvas.parentElement;
-  // Desired visual position of the element's top-left corner
-  const vx=cx-cr.left-dragOffset.x+p.scrollLeft;
-  const vy=cy-cr.top-dragOffset.y+p.scrollTop;
-  // transform-origin:top center means the element shrinks symmetrically around its
-  // horizontal midpoint, so the visual left drifts right by naturalWidth*(1-scale)/2.
-  // We must subtract that drift to get the correct CSS left.
-  const scaleM=draggingDesk.style.transform.match(/scale\(([^)]+)\)/);
-  const scale=scaleM?parseFloat(scaleM[1]):1;
-  const shift=draggingDesk.offsetWidth*(1-scale)/2;
-  let x=clamp(vx-shift,0,canvas.offsetWidth-80);
-  let y=clamp(vy,0,canvas.offsetHeight-80);
+  const x=clamp(cx-cr.left-dragOffset.x+p.scrollLeft, 0, canvas.offsetWidth-draggingDesk.offsetWidth);
+  const y=clamp(cy-cr.top-dragOffset.y+p.scrollTop, 0, canvas.offsetHeight-40);
   draggingDesk.style.left=x+'px';
   draggingDesk.style.top=y+'px';
 }
@@ -1233,21 +1262,26 @@ function initDragDrop(){
   canvas.addEventListener('dragenter',e=>{e.preventDefault();canvas.classList.add('drag-over');});
   canvas.addEventListener('dragover',e=>e.preventDefault());
   canvas.addEventListener('dragleave',e=>{if(!canvas.contains(e.relatedTarget))canvas.classList.remove('drag-over');});
-  canvas.addEventListener('drop',e=>{e.preventDefault();canvas.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f?.type.startsWith('image/'))loadBg(f);});
+  canvas.addEventListener('drop',e=>{e.preventDefault();canvas.classList.remove('drag-over');if(getDraft()?.bgLocked){toast('Background is locked 🔒');return;}const f=e.dataTransfer.files[0];if(f?.type.startsWith('image/'))loadBg(f);});
 }
 
 function loadBg(file){
+  const draft=getDraft();
+  if(draft?.bgLocked){ toast('Background is locked 🔒'); return; }
   const reader=new FileReader();
   reader.onload=e=>{
     const img=new Image();
     img.onload=()=>{
-      const MAX=1920;
+      const MAX=2400;
       const scale=Math.min(1,MAX/Math.max(img.width,img.height));
       const w=Math.round(img.width*scale), h=Math.round(img.height*scale);
       const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
       cv.getContext('2d').drawImage(img,0,0,w,h);
-      const compressed=cv.toDataURL('image/jpeg',0.85);
-      const d=getDraft(); d.background=compressed; d.bgZoom=100;
+      const compressed=cv.toDataURL('image/jpeg',0.88);
+      const d=getDraft();
+      d.background=compressed; d.bgZoom=100;
+      // Auto-size canvas to image
+      d.canvasW=Math.max(800,w); d.canvasH=Math.max(600,h);
       snap(`Updated background · ${getOffice().name} / ${d.name}`); renderCanvas(); save();
     };
     img.src=e.target.result;
@@ -1323,7 +1357,14 @@ function initControls(){
   document.getElementById('upload-bg-btn').addEventListener('click',()=>bgf.click());
   bgf.addEventListener('change',e=>{if(e.target.files[0])loadBg(e.target.files[0]);bgf.value='';});
 
-  document.getElementById('clear-bg-btn').addEventListener('click',()=>{ const d=getDraft(); if(!d.background)return; snap(`Cleared background · ${getOffice().name} / ${d.name}`); d.background=null; renderCanvas(); save(); });
+  document.getElementById('clear-bg-btn').addEventListener('click',()=>{ const d=getDraft(); if(d?.bgLocked){toast('Background is locked 🔒');return;} if(!d.background)return; snap(`Cleared background · ${getOffice().name} / ${d.name}`); d.background=null; renderCanvas(); save(); });
+
+  // Lock BG
+  document.getElementById('lock-bg-btn').addEventListener('click',()=>{
+    const d=getDraft(); if(!d)return;
+    d.bgLocked=!d.bgLocked; save(); renderCanvas();
+    toast(d.bgLocked?'Background locked 🔒':'Background unlocked 🔓');
+  });
   document.getElementById('clear-desks-btn').addEventListener('click',()=>{ if(!confirm('Remove all desks from this draft?'))return; snap(`Cleared all desks · ${getOffice().name} / ${getDraft()?.name}`); getDraft().desks=[]; renderCanvas(); renderPeopleList(); renderTabs(); save(); });
 
   // New hire key toggle
@@ -1354,10 +1395,123 @@ function initControls(){
 }
 
 // ═══════════════════════════════════════════════════════
+// MULTI-SELECT + RUBBER BAND
+// ═══════════════════════════════════════════════════════
+function clearDeskSelection(){
+  selectedDeskIds.forEach(id=>{
+    const el=document.querySelector(`.desk-icon[data-id="${id}"]`);
+    el?.classList.remove('multi-sel','selected');
+  });
+  selectedDeskIds.clear();
+}
+
+function selectDesksInRect(x,y,w,h){
+  const draft=getDraft(); if(!draft)return;
+  selectedDeskIds.clear();
+  draft.desks.forEach(desk=>{
+    const el=document.querySelector(`.desk-icon[data-id="${desk.id}"]`);
+    if(!el)return;
+    const dw=el.offsetWidth, dh=el.offsetHeight;
+    const overlaps=desk.x<x+w && desk.x+dw>x && desk.y<y+h && desk.y+dh>y;
+    if(overlaps){ selectedDeskIds.add(desk.id); el.classList.add('multi-sel'); }
+    else el.classList.remove('multi-sel');
+  });
+}
+
+function initRubberBand(){
+  const canvas=document.getElementById('floor-canvas');
+  canvas.addEventListener('mousedown',e=>{
+    // Only start rubber band on canvas background or bg-img — not on desks/controls/key
+    if(e.target.matches('.desk-icon,.dc-btn,.desk-body,.desk-surface,.desk-person,.desk-label,.desk-controls,.canvas-key,.key-hd,.key-body,.key-close,.desk-new-badge')) return;
+    if(e.button!==0)return;
+    const cr=canvas.getBoundingClientRect();
+    const p=canvas.parentElement;
+    const startX=e.clientX-cr.left+p.scrollLeft;
+    const startY=e.clientY-cr.top+p.scrollTop;
+    // Clear previous selection
+    clearDeskSelection();
+    const rb=document.createElement('div');
+    rb.className='rubber-band';
+    rb.style.cssText=`left:${startX}px;top:${startY}px;width:0;height:0;`;
+    canvas.appendChild(rb);
+    rubberBand={startX,startY,el:rb};
+    const onMove=ev=>{
+      if(!rubberBand)return;
+      const cx=ev.clientX-cr.left+p.scrollLeft;
+      const cy=ev.clientY-cr.top+p.scrollTop;
+      const rx=Math.min(cx,rubberBand.startX), ry=Math.min(cy,rubberBand.startY);
+      const rw=Math.abs(cx-rubberBand.startX), rh=Math.abs(cy-rubberBand.startY);
+      rb.style.left=rx+'px'; rb.style.top=ry+'px';
+      rb.style.width=rw+'px'; rb.style.height=rh+'px';
+      if(rw>5||rh>5) selectDesksInRect(rx,ry,rw,rh);
+    };
+    const onUp=()=>{
+      rb.remove(); rubberBand=null;
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+    };
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  });
+  // Escape clears selection
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') clearDeskSelection(); });
+  // Ctrl+A selects all desks
+  document.addEventListener('keydown',e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key==='a'){
+      const focused=document.activeElement;
+      if(focused&&(focused.tagName==='INPUT'||focused.tagName==='TEXTAREA'))return;
+      e.preventDefault();
+      clearDeskSelection();
+      const draft=getDraft(); if(!draft)return;
+      draft.desks.forEach(desk=>{
+        selectedDeskIds.add(desk.id);
+        document.querySelector(`.desk-icon[data-id="${desk.id}"]`)?.classList.add('multi-sel');
+      });
+    }
+  });
+}
+
+// Group drag for multi-selected desks
+function startMultiDrag(e){
+  const canvas=document.getElementById('floor-canvas');
+  const cr=canvas.getBoundingClientRect();
+  const p=canvas.parentElement;
+  const startX=e.clientX-cr.left+p.scrollLeft;
+  const startY=e.clientY-cr.top+p.scrollTop;
+  const draft=getDraft(); if(!draft)return;
+  const startPos=new Map();
+  draft.desks.forEach(desk=>{ if(selectedDeskIds.has(desk.id)) startPos.set(desk.id,{x:desk.x,y:desk.y}); });
+  selectedDeskIds.forEach(id=>{ document.querySelector(`.desk-icon[data-id="${id}"]`)?.style.setProperty('z-index','100'); });
+  multiDragState={startX,startY,startPos};
+  const onMove=ev=>{
+    if(!multiDragState)return;
+    const cx=ev.clientX-cr.left+p.scrollLeft;
+    const cy=ev.clientY-cr.top+p.scrollTop;
+    const dx=cx-multiDragState.startX, dy=cy-multiDragState.startY;
+    multiDragState.startPos.forEach((pos,id)=>{
+      const el=document.querySelector(`.desk-icon[data-id="${id}"]`); if(!el)return;
+      el.style.left=clamp(pos.x+dx,0,canvas.offsetWidth-el.offsetWidth)+'px';
+      el.style.top=clamp(pos.y+dy,0,canvas.offsetHeight-40)+'px';
+    });
+  };
+  const onUp=()=>{
+    if(!multiDragState)return;
+    const d=getDraft();
+    if(d){ d.desks.forEach(desk=>{ if(selectedDeskIds.has(desk.id)){ const el=document.querySelector(`.desk-icon[data-id="${desk.id}"]`); if(el){desk.x=parseInt(el.style.left);desk.y=parseInt(el.style.top);} } }); save(); }
+    selectedDeskIds.forEach(id=>{ document.querySelector(`.desk-icon[data-id="${id}"]`)?.style.setProperty('z-index','10'); });
+    multiDragState=null;
+    document.removeEventListener('mousemove',onMove);
+    document.removeEventListener('mouseup',onUp);
+  };
+  document.addEventListener('mousemove',onMove);
+  document.addEventListener('mouseup',onUp);
+}
+
+// ═══════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════
 load(); loadHistory(); loadUser();
-renderAll(); initDragDrop(); initControls(); renderHistory(); updateUserChip();
+renderAll(); initDragDrop(); initControls(); initRubberBand(); renderHistory(); updateUserChip();
 
 // Show login if no user
 if(!currentUser){ document.getElementById('login-overlay').style.display='flex'; }
