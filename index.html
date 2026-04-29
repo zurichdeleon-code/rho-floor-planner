@@ -163,6 +163,9 @@ header{background:#0f1a2b;color:white;padding:0 18px;height:50px;display:flex;al
 .floor-canvas{position:relative;width:1300px;min-height:760px;background:#fdfdfd;border:2px dashed #d0d4dc;border-radius:12px;overflow:visible;box-shadow:0 4px 20px rgba(0,0,0,.06);transition:border-color .2s,background .2s;flex-shrink:0;}
 .floor-canvas.drag-over{border-color:#2dd4bf;background:#f0fdfc;}
 .floor-canvas.bg-locked .bg-img{outline:2px solid #f97316;outline-offset:-2px;}
+.floor-canvas.move-bg-mode{cursor:move;}
+.canvas-container.pan-mode{cursor:grab;}
+.canvas-container.pan-mode:active{cursor:grabbing;}
 .bg-img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:fill;pointer-events:none;user-select:none;border-radius:10px;}
 /* Rubber-band selection box */
 .rubber-band{position:absolute;border:1.5px solid #2dd4bf;background:rgba(45,212,191,.08);pointer-events:none;z-index:50;border-radius:2px;}
@@ -301,10 +304,10 @@ header{background:#0f1a2b;color:white;padding:0 18px;height:50px;display:flex;al
   <div class="login-box">
     <div class="login-logo">ρ</div>
     <h2>Rho Office Floor Planner</h2>
-    <p class="login-sub">Enter your name to start editing</p>
+    <p class="login-sub">Who's editing? Your name shows up in version history so the team knows who made changes.</p>
     <input id="login-input" class="login-input" type="text" placeholder="Your name..." maxlength="30" autofocus>
     <button id="login-btn" class="login-btn">Continue →</button>
-    <p class="login-note">Layouts save locally in your browser.<br>Use Export to share with teammates.</p>
+    <p class="login-note">All floors and layouts are shared — everyone sees the same data.<br>Your name appears in version history so the team knows who made changes.</p>
   </div>
 </div>
 
@@ -390,9 +393,17 @@ header{background:#0f1a2b;color:white;padding:0 18px;height:50px;display:flex;al
     <div class="canvas-toolbar">
       <button class="tbtn" id="upload-bg-btn">🖼 Upload BG</button>
       <button class="tbtn danger" id="clear-bg-btn">✕ Clear BG</button>
+      <button class="tbtn" id="move-bg-btn" title="Toggle: drag canvas to reposition background image">📍 Move BG</button>
       <button class="tbtn" id="lock-bg-btn">🔓 Lock BG</button>
       <button class="tbtn danger" id="clear-desks-btn">🗑 Clear Desks</button>
       <button class="tbtn" id="key-toggle-btn">🗝 New Hire Key</button>
+      <div class="bg-zoom-wrap" id="view-zoom-wrap" style="display:flex">
+        <label>🔎 View</label>
+        <input type="range" id="view-zoom-slider" min="10" max="100" value="100" step="5" style="width:80px;accent-color:#2dd4bf;cursor:pointer;">
+        <span class="bg-zoom-val" id="view-zoom-val">100%</span>
+        <button class="tbtn" id="fit-btn" style="padding:3px 8px;font-size:11px;margin-left:2px;" title="Fit canvas to window">⊡ Fit</button>
+      </div>
+      <button class="tbtn" id="pan-btn" title="Pan mode: drag to scroll the canvas">✋ Pan</button>
       <div class="bg-zoom-wrap" id="bg-zoom-wrap">
         <label>🔍 BG Zoom</label>
         <input type="range" id="bg-zoom-slider" min="50" max="250" value="100" step="5">
@@ -463,7 +474,7 @@ let nextDeptId = 1;
 // ═══════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════
-function mkDraft(id, name){ return {id,name:name||'Option A',desks:[],background:null,bgZoom:100,departments:[],showKey:false,keyPos:{x:20,y:20},bgLocked:false,canvasW:1300,canvasH:760}; }
+function mkDraft(id, name){ return {id,name:name||'Option A',desks:[],background:null,bgZoom:100,bgX:0,bgY:0,departments:[],showKey:false,keyPos:{x:20,y:20},bgLocked:false,canvasW:1300,canvasH:760}; }
 function mkOffice(id){ return {id,name:`Floor ${id}`,color:COLOR_OPTIONS[(id-1)%COLOR_OPTIONS.length].hex,nextDraftId:2,activeDraftId:1,drafts:[mkDraft(1,'Option A')]}; }
 
 const OFFICES = [mkOffice(1),mkOffice(2),mkOffice(3),mkOffice(4)];
@@ -480,6 +491,13 @@ let sortState = null; // office reorder drag
 let selectedDeskIds = new Set();
 let rubberBand = null;
 let multiDragState = null;
+
+// Background move mode
+let bgMoveMode = false;
+
+// View zoom & pan
+let viewZoom = 1.0;
+let panMode = false;
 
 // ═══════════════════════════════════════════════════════
 // HELPERS
@@ -499,7 +517,7 @@ function load(){
     const raw=localStorage.getItem('rho_fp_v2');
     if(!raw)return;
     const s=JSON.parse(raw);
-    s.OFFICES?.forEach((so,i)=>{ if(OFFICES[i]){ Object.assign(OFFICES[i],so); so.drafts?.forEach(d=>{if(d.id>=OFFICES[i].nextDraftId)OFFICES[i].nextDraftId=d.id+1;}); }});
+    s.OFFICES?.forEach((so,i)=>{ if(OFFICES[i]){ Object.assign(OFFICES[i],so); so.drafts?.forEach(d=>{ if(d.id>=OFFICES[i].nextDraftId)OFFICES[i].nextDraftId=d.id+1; if(d.bgX==null)d.bgX=0; if(d.bgY==null)d.bgY=0; }); }});
     if(s.currentOfficeId) currentOfficeId=s.currentOfficeId;
     if(s.nextDeskId) nextDeskId=s.nextDeskId;
     if(s.nextDeptId) nextDeptId=s.nextDeptId;
@@ -935,6 +953,26 @@ function _dsOutside(e){
 
 function closeDeskSettings(){ document.getElementById('desk-settings').classList.remove('open'); _dsDesk=null; _dsEl=null; }
 
+// ── VIEW ZOOM ─────────────────────────────────────────
+function applyViewZoom(z){
+  viewZoom = Math.max(0.1, Math.min(1, z));
+  const canvas = document.getElementById('floor-canvas');
+  if(canvas){ canvas.style.transform = viewZoom < 1 ? `scale(${viewZoom})` : ''; canvas.style.transformOrigin = 'top left'; }
+  const pct = Math.round(viewZoom * 100);
+  const sl = document.getElementById('view-zoom-slider'); if(sl) sl.value = pct;
+  const lbl = document.getElementById('view-zoom-val'); if(lbl) lbl.textContent = pct + '%';
+}
+
+function fitCanvasToView(){
+  const container = document.querySelector('.canvas-container');
+  const draft = getDraft(); if(!container) return;
+  const cw = container.clientWidth - 60;
+  const ch = container.clientHeight - 60;
+  const scaleX = cw / (draft?.canvasW || 1300);
+  const scaleY = ch / (draft?.canvasH || 760);
+  applyViewZoom(Math.min(1, scaleX, scaleY));
+}
+
 function applyDeskColor(el,desk){
   const dept=desk.deptId?getDept(desk.deptId):null;
   const dc=desk.color||(dept?dept.color:'#2dd4bf');
@@ -1047,20 +1085,26 @@ function renderCanvas(){
   document.getElementById('upload-bg-btn').disabled=locked;
   document.getElementById('clear-bg-btn').disabled=locked;
   document.getElementById('bg-zoom-slider').disabled=locked;
+  // Sync Move BG button & mode
+  if(locked && bgMoveMode){ bgMoveMode=false; canvas.classList.remove('move-bg-mode'); }
+  const moveBgBtn=document.getElementById('move-bg-btn');
+  if(moveBgBtn){ moveBgBtn.disabled=locked; moveBgBtn.classList.toggle('active',bgMoveMode); canvas.classList.toggle('move-bg-mode',bgMoveMode); }
 
   let bgImg=canvas.querySelector('.bg-img');
   if(draft.background){
     if(!bgImg){ bgImg=document.createElement('img'); bgImg.className='bg-img'; bgImg.draggable=false; canvas.insertBefore(bgImg,canvas.firstChild); }
-    bgImg.src=draft.background; applyBgZoom(bgImg,draft.bgZoom);
+    bgImg.src=draft.background; applyBgZoom(bgImg,draft.bgZoom,draft.bgX||0,draft.bgY||0);
     hint.classList.add('hidden'); showBgZoom(!locked,draft.bgZoom);
   } else {
     bgImg?.remove(); hint.classList.remove('hidden'); showBgZoom(false);
   }
   draft.desks.forEach(desk=>canvas.appendChild(mkDeskEl(desk)));
   renderKey();
+  // Persist view zoom
+  if(viewZoom < 1) applyViewZoom(viewZoom);
 }
 
-function applyBgZoom(img,zoom){ img.style.transform=`scale(${zoom/100})`; img.style.transformOrigin='center center'; }
+function applyBgZoom(img,zoom,bgX=0,bgY=0){ img.style.transform=`translate(${bgX}px,${bgY}px) scale(${zoom/100})`; img.style.transformOrigin='top left'; }
 function showBgZoom(vis,val=100){
   const w=document.getElementById('bg-zoom-wrap');
   w.classList.toggle('vis',vis);
@@ -1198,6 +1242,7 @@ function _stopKeyDrag(){
 // ═══════════════════════════════════════════════════════
 function startDeskDrag(e){
   if(e.target.matches('.dc-btn'))return;
+  if(panMode)return;
   e.preventDefault();
   const el=e.currentTarget;
   const id=+el.dataset.id;
@@ -1206,7 +1251,7 @@ function startDeskDrag(e){
   // Otherwise clear selection and do single drag
   clearDeskSelection();
   const r=el.getBoundingClientRect();
-  draggingDesk=el; dragOffset={x:e.clientX-r.left,y:e.clientY-r.top};
+  draggingDesk=el; dragOffset={x:(e.clientX-r.left)/viewZoom,y:(e.clientY-r.top)/viewZoom};
   el.classList.add('selected'); el.style.zIndex=100;
   document.addEventListener('mousemove',onDeskDrag);
   document.addEventListener('mouseup',stopDeskDrag);
@@ -1219,8 +1264,8 @@ function moveDeskTo(cx,cy){
   const canvas=document.getElementById('floor-canvas');
   const cr=canvas.getBoundingClientRect();
   const p=canvas.parentElement;
-  const x=clamp(cx-cr.left-dragOffset.x+p.scrollLeft, 0, canvas.offsetWidth-draggingDesk.offsetWidth);
-  const y=clamp(cy-cr.top-dragOffset.y+p.scrollTop, 0, canvas.offsetHeight-40);
+  const x=clamp((cx-cr.left+p.scrollLeft)/viewZoom-dragOffset.x, 0, canvas.offsetWidth-draggingDesk.offsetWidth);
+  const y=clamp((cy-cr.top+p.scrollTop)/viewZoom-dragOffset.y, 0, canvas.offsetHeight-40);
   draggingDesk.style.left=x+'px';
   draggingDesk.style.top=y+'px';
 }
@@ -1279,7 +1324,7 @@ function loadBg(file){
       cv.getContext('2d').drawImage(img,0,0,w,h);
       const compressed=cv.toDataURL('image/jpeg',0.88);
       const d=getDraft();
-      d.background=compressed; d.bgZoom=100;
+      d.background=compressed; d.bgZoom=100; d.bgX=0; d.bgY=0;
       // Auto-size canvas to image
       d.canvasW=Math.max(800,w); d.canvasH=Math.max(600,h);
       snap(`Updated background · ${getOffice().name} / ${d.name}`); renderCanvas(); save();
@@ -1357,7 +1402,7 @@ function initControls(){
   document.getElementById('upload-bg-btn').addEventListener('click',()=>bgf.click());
   bgf.addEventListener('change',e=>{if(e.target.files[0])loadBg(e.target.files[0]);bgf.value='';});
 
-  document.getElementById('clear-bg-btn').addEventListener('click',()=>{ const d=getDraft(); if(d?.bgLocked){toast('Background is locked 🔒');return;} if(!d.background)return; snap(`Cleared background · ${getOffice().name} / ${d.name}`); d.background=null; renderCanvas(); save(); });
+  document.getElementById('clear-bg-btn').addEventListener('click',()=>{ const d=getDraft(); if(d?.bgLocked){toast('Background is locked 🔒');return;} if(!d.background)return; snap(`Cleared background · ${getOffice().name} / ${d.name}`); d.background=null; d.bgX=0; d.bgY=0; d.bgZoom=100; bgMoveMode=false; renderCanvas(); save(); });
 
   // Lock BG
   document.getElementById('lock-bg-btn').addEventListener('click',()=>{
@@ -1373,10 +1418,56 @@ function initControls(){
     draft.showKey=!draft.showKey; save(); renderKey();
   });
 
+  // View zoom slider
+  document.getElementById('view-zoom-slider').addEventListener('input',e=>{
+    applyViewZoom(+e.target.value/100);
+  });
+
+  // Fit button
+  document.getElementById('fit-btn').addEventListener('click', fitCanvasToView);
+
+  // Pan mode
+  document.getElementById('pan-btn').addEventListener('click',()=>{
+    panMode=!panMode;
+    document.getElementById('pan-btn').classList.toggle('active',panMode);
+    const container=document.querySelector('.canvas-container');
+    container.classList.toggle('pan-mode',panMode);
+    // Turn off conflicting modes
+    if(panMode && bgMoveMode){ bgMoveMode=false; document.getElementById('move-bg-btn').classList.remove('active'); document.getElementById('floor-canvas').classList.remove('move-bg-mode'); }
+    toast(panMode?'✋ Pan mode: drag anywhere to scroll':'Pan mode off');
+  });
+
+  // Pan mode drag on container
+  (()=>{
+    const container=document.querySelector('.canvas-container');
+    let _panDrag=null;
+    container.addEventListener('mousedown',e=>{
+      if(!panMode)return;
+      if(e.button!==0)return;
+      e.preventDefault();
+      _panDrag={startX:e.clientX+container.scrollLeft, startY:e.clientY+container.scrollTop};
+      const onMove=ev=>{ if(!_panDrag)return; container.scrollLeft=_panDrag.startX-ev.clientX; container.scrollTop=_panDrag.startY-ev.clientY; };
+      const onUp=()=>{ _panDrag=null; document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); };
+      document.addEventListener('mousemove',onMove);
+      document.addEventListener('mouseup',onUp);
+    });
+  })();
+
+  // Move BG mode toggle
+  document.getElementById('move-bg-btn').addEventListener('click',()=>{
+    const d=getDraft(); if(!d)return;
+    if(d.bgLocked){toast('Background is locked 🔒');return;}
+    if(!d.background){toast('Upload a background first');return;}
+    bgMoveMode=!bgMoveMode;
+    document.getElementById('move-bg-btn').classList.toggle('active',bgMoveMode);
+    document.getElementById('floor-canvas').classList.toggle('move-bg-mode',bgMoveMode);
+    toast(bgMoveMode?'📍 Drag the canvas to reposition background — click Move BG again to exit':'Move BG mode off');
+  });
+
   // BG zoom
   document.getElementById('bg-zoom-slider').addEventListener('input',e=>{
     const v=+e.target.value; document.getElementById('bg-zoom-val').textContent=v+'%';
-    const d=getDraft(); d.bgZoom=v; const img=document.querySelector('.bg-img'); if(img)applyBgZoom(img,v); save();
+    const d=getDraft(); d.bgZoom=v; const img=document.querySelector('.bg-img'); if(img)applyBgZoom(img,v,d.bgX||0,d.bgY||0); save();
   });
 
   // Export/Share
@@ -1424,10 +1515,28 @@ function initRubberBand(){
     // Only start rubber band on canvas background or bg-img — not on desks/controls/key
     if(e.target.matches('.desk-icon,.dc-btn,.desk-body,.desk-surface,.desk-person,.desk-label,.desk-controls,.canvas-key,.key-hd,.key-body,.key-close,.desk-new-badge')) return;
     if(e.button!==0)return;
+    if(panMode) return; // pan mode handled by container
+    // --- BG MOVE MODE: drag to reposition background ---
+    if(bgMoveMode){
+      const d=getDraft(); if(!d||!d.background)return;
+      e.preventDefault();
+      const startX=e.clientX, startY=e.clientY;
+      const startBgX=d.bgX||0, startBgY=d.bgY||0;
+      const img=canvas.querySelector('.bg-img');
+      const onMove=ev=>{
+        d.bgX=startBgX+(ev.clientX-startX)/viewZoom;
+        d.bgY=startBgY+(ev.clientY-startY)/viewZoom;
+        if(img) applyBgZoom(img,d.bgZoom,d.bgX,d.bgY);
+      };
+      const onUp=()=>{ save(); document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); };
+      document.addEventListener('mousemove',onMove);
+      document.addEventListener('mouseup',onUp);
+      return;
+    }
     const cr=canvas.getBoundingClientRect();
     const p=canvas.parentElement;
-    const startX=e.clientX-cr.left+p.scrollLeft;
-    const startY=e.clientY-cr.top+p.scrollTop;
+    const startX=(e.clientX-cr.left+p.scrollLeft)/viewZoom;
+    const startY=(e.clientY-cr.top+p.scrollTop)/viewZoom;
     // Clear previous selection
     clearDeskSelection();
     const rb=document.createElement('div');
@@ -1437,8 +1546,8 @@ function initRubberBand(){
     rubberBand={startX,startY,el:rb};
     const onMove=ev=>{
       if(!rubberBand)return;
-      const cx=ev.clientX-cr.left+p.scrollLeft;
-      const cy=ev.clientY-cr.top+p.scrollTop;
+      const cx=(ev.clientX-cr.left+p.scrollLeft)/viewZoom;
+      const cy=(ev.clientY-cr.top+p.scrollTop)/viewZoom;
       const rx=Math.min(cx,rubberBand.startX), ry=Math.min(cy,rubberBand.startY);
       const rw=Math.abs(cx-rubberBand.startX), rh=Math.abs(cy-rubberBand.startY);
       rb.style.left=rx+'px'; rb.style.top=ry+'px';
@@ -1453,8 +1562,14 @@ function initRubberBand(){
     document.addEventListener('mousemove',onMove);
     document.addEventListener('mouseup',onUp);
   });
-  // Escape clears selection
-  document.addEventListener('keydown',e=>{ if(e.key==='Escape') clearDeskSelection(); });
+  // Escape clears selection / exits bg move mode
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){
+      clearDeskSelection();
+      if(bgMoveMode){ bgMoveMode=false; document.getElementById('move-bg-btn')?.classList.remove('active'); document.getElementById('floor-canvas')?.classList.remove('move-bg-mode'); }
+      if(panMode){ panMode=false; document.getElementById('pan-btn')?.classList.remove('active'); document.querySelector('.canvas-container')?.classList.remove('pan-mode'); }
+    }
+  });
   // Ctrl+A selects all desks
   document.addEventListener('keydown',e=>{
     if((e.ctrlKey||e.metaKey)&&e.key==='a'){
@@ -1474,20 +1589,15 @@ function initRubberBand(){
 // Group drag for multi-selected desks
 function startMultiDrag(e){
   const canvas=document.getElementById('floor-canvas');
-  const cr=canvas.getBoundingClientRect();
-  const p=canvas.parentElement;
-  const startX=e.clientX-cr.left+p.scrollLeft;
-  const startY=e.clientY-cr.top+p.scrollTop;
   const draft=getDraft(); if(!draft)return;
   const startPos=new Map();
   draft.desks.forEach(desk=>{ if(selectedDeskIds.has(desk.id)) startPos.set(desk.id,{x:desk.x,y:desk.y}); });
   selectedDeskIds.forEach(id=>{ document.querySelector(`.desk-icon[data-id="${id}"]`)?.style.setProperty('z-index','100'); });
-  multiDragState={startX,startY,startPos};
+  const startClientX=e.clientX, startClientY=e.clientY;
+  multiDragState={startClientX,startClientY,startPos};
   const onMove=ev=>{
     if(!multiDragState)return;
-    const cx=ev.clientX-cr.left+p.scrollLeft;
-    const cy=ev.clientY-cr.top+p.scrollTop;
-    const dx=cx-multiDragState.startX, dy=cy-multiDragState.startY;
+    const dx=(ev.clientX-startClientX)/viewZoom, dy=(ev.clientY-startClientY)/viewZoom;
     multiDragState.startPos.forEach((pos,id)=>{
       const el=document.querySelector(`.desk-icon[data-id="${id}"]`); if(!el)return;
       el.style.left=clamp(pos.x+dx,0,canvas.offsetWidth-el.offsetWidth)+'px';
@@ -1512,10 +1622,9 @@ function startMultiDrag(e){
 // ═══════════════════════════════════════════════════════
 load(); loadHistory(); loadUser();
 renderAll(); initDragDrop(); initControls(); initRubberBand(); renderHistory(); updateUserChip();
-
-// Show login if no user
-if(!currentUser){ document.getElementById('login-overlay').style.display='flex'; }
-else { document.getElementById('login-overlay').classList.add('gone'); }
+// Show name prompt only if no name saved yet; otherwise go straight in
+if(currentUser){ document.getElementById('login-overlay').classList.add('gone'); }
+else { document.getElementById('login-overlay').style.display='flex'; }
 </script>
 </body>
 </html>
